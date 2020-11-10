@@ -8,6 +8,7 @@ from googleapiclient.discovery import build
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 import pandas as pd
+import xlrd
 
 # If modifying these scopes, delete the file token.pickle.
 SCOPES = [
@@ -15,18 +16,9 @@ SCOPES = [
     'https://www.googleapis.com/auth/spreadsheets.readonly'
 ]
 
-# The ID and range of a sample spreadsheet (retrieve from config)
-parser = ConfigParser()
-parser.read('./config.ini')
-
-BDD_SPREADSHEET_ID = parser.get('drive', 'spreadsheet')
-ID_TITLE = parser.get('drive', 'ID_title')
-STOCK_TITLE = parser.get('drive', 'stock_title')
 ID_RANGE = 'BDD!A:A'
 
-
 MAGIC_NUMBER = 64
-
 
 def col_to_a1(col):
     col = col + 1
@@ -40,7 +32,6 @@ def col_to_a1(col):
         column_label = chr(mod + MAGIC_NUMBER) + column_label
     label = f'{column_label}'
     return label
-
 
 def rowcol_to_a1(row, col):
     """Translates a row and column cell address to A1 notation.
@@ -61,69 +52,12 @@ def rowcol_to_a1(row, col):
     label = f'{col_to_a1(col)}{row + 2}'
     return label
 
-
-def retrieve_product_ids(sheet, sheetId=BDD_SPREADSHEET_ID, idRange=ID_RANGE):
-    result = sheet.values().get(spreadsheetId=sheetId,
-                                range=idRange).execute()
-    values = result.get('values', [])
-    # Use -1 id for unknown values
-    # We skip the first elem since this is column title
-    ids = []
-    for vv in values[1:]:
-        if len(vv) == 1:
-            ids.append(int(vv[0]))
-        else:
-            ids.append(-1)
-    return ids
-
-
-def get_ids_mapping(ids: list) -> dict:
-    ret = {}
-    for ii in range(0, len(ids)):
-        ret[ids[ii]] = ii
-    return ret
-
-
 def check_duplicated(values):
     aserie = pd.Series(values)
     aduplicated = aserie.duplicated()
     duplicated_index = aduplicated[aduplicated == True].index.values
     duplicated_values = aserie[duplicated_index]
     return duplicated_values
-
-
-def get_column_ref(sheet, key: str, sheetId=BDD_SPREADSHEET_ID) -> (str, int):
-    result = sheet.values().get(spreadsheetId=sheetId,
-                                range='BDD!1:1').execute()
-    values = result.get('values', [])
-    # we retrieve only 1 row
-    values = values[0]
-    try:
-        idx = values.index(key)
-        return col_to_a1(idx), idx
-    except ValueError:
-        return '', -1
-
-
-def batch_element(row, col, value) -> dict:
-    range_name = rowcol_to_a1(row, col)
-    return {
-        'values': [
-            [value]
-        ],
-        'range': range_name
-    }
-
-
-def commit_batch(sheet, data: list):
-    body = {
-        'valueInputOption': 'USER_ENTERED',
-        'data': data
-    }
-    result = sheet.values().batchUpdate(
-        spreadsheetId=BDD_SPREADSHEET_ID, body=body).execute()
-    return result
-
 
 def retrieve_credentials():
     creds = None
@@ -144,36 +78,117 @@ def retrieve_credentials():
     return creds
 
 
+
+class StockSyncer(object):
+    def __init__(self, *, sheetId, IdTitle, stockTitle, credentials):
+        service = build('sheets', 'v4', credentials=credentials)
+        # Call the Sheets API
+        self.sheet = service.spreadsheets()
+        self.sheetId = sheetId
+        self.IdTitle = IdTitle
+        self.stockTitle = stockTitle
+        self.product_ids = []
+        self.product_ids_mapping = {}
+
+
+    def _retrieve_product_ids(self, idRange=ID_RANGE):
+        result = self.sheet.values().get(spreadsheetId=self.sheetId,
+            range=idRange).execute()
+        values = result.get('values', [])
+        # Use -1 id for unknown values
+        # We skip the first elem since this is column title
+        ids = []
+        ids_mapping = {}
+        idx = 0
+        for vv in values[1:]:
+            if len(vv) == 1:
+                value = int(vv[0])
+            else:
+                value = -1
+            ids.append(value)
+            ids_mapping[value] = idx
+            idx = idx + 1
+        self.product_ids = ids
+        self.product_ids_mapping = ids_mapping
+        return ids
+    
+    def _get_column_ref(self, key: str) -> (str, int):
+        result = self.sheet.values().get(spreadsheetId=self.sheetId,
+            range='BDD!1:1').execute()
+        values = result.get('values', [])
+        # we retrieve only 1 row
+        values = values[0]
+        try:
+            idx = values.index(key)
+            return col_to_a1(idx), idx
+        except ValueError:
+            return '', -1
+
+    def _batch_element(self, row, col, value) -> dict:
+        range_name = rowcol_to_a1(row, col)
+        return {
+            'values': [
+                [value]
+            ],
+            'range': range_name
+        }
+
+
+    def _commit_batch(self, data: list):
+        body = {
+            'valueInputOption': 'USER_ENTERED',
+            'data': data    
+        }
+        result = self.sheet.values().batchUpdate(
+            spreadsheetId=self.sheetId, body=body
+        ).execute()
+        return result
+    
+    def sync(self, xls_data: bytes):
+        book = xlrd.open_workbook(file_contents=xls_data)
+        tmp = pd.read_excel(book, engine='xlrd')
+        stock = tmp[['id', 'qty_available']]
+        print("retrieving drive column title")
+        stock_column_name, stock_column_id = self._get_column_ref(self.stockTitle)
+        print("retrieving drive product IDs")
+        id_column_name, id_column_id = self._get_column_ref(self.IdTitle)
+        self._retrieve_product_ids()
+
+        data = []
+        for elem in stock.values:
+            product_id = int(elem[0])
+            product_qty = elem[1]
+            row = self.product_ids_mapping.get(product_id, None)
+            if row is not None:
+                # print(f"Row: {row}, Id: {product_id}, Qty: {product_qty}")
+                # First row is title
+                batch_entry = self._batch_element(row, stock_column_id, product_qty)
+                data.append(batch_entry)
+        print("Batch update")
+        result = self._commit_batch(data)
+        print(f"{result}")
+
+
+
+
 def main(stock_file):
     creds = retrieve_credentials()
-    service = build('sheets', 'v4', credentials=creds)
-    # Call the Sheets API
-    sheet = service.spreadsheets()
+    # The ID and range of a sample spreadsheet (retrieve from config)
+    parser = ConfigParser()
+    parser.read('./config.ini')
+
+    stockSyncer = StockSyncer(sheetId=parser.get('drive', 'spreadsheet'),
+        IdTitle=parser.get('drive', 'ID_title'),
+        stockTitle=parser.get('drive', 'stock_title'),
+        credentials=creds
+        )
 
     # Read stock file
     print("Reading xls file")
-    tmp = pd.read_excel(stock_file)
-    stock = tmp[['id', 'qty_available']]
-    print("Retrieving drive column title")
-    stock_column_name, stock_column_id = get_column_ref(sheet, STOCK_TITLE)
-    print("Retrieving drive product ids")
-    id_column_name, id_column_id = get_column_ref(sheet, ID_TITLE)
-    product_ids = retrieve_product_ids(sheet)
-    product_ids_mapping = get_ids_mapping(product_ids)
-
-    data = []
-    for elem in stock.values:
-        product_id = int(elem[0])
-        product_qty = elem[1]
-        row = product_ids_mapping.get(product_id, None)
-        if row is not None:
-            # print(f"Row: {row}, Id: {product_id}, Qty: {product_qty}")
-            # First row is title
-            batch_entry = batch_element(row, stock_column_id, product_qty)
-            data.append(batch_entry)
-    print("Batch update")
-    result = commit_batch(sheet, data)
-    print(result)
+    with open(stock_file, 'rb') as f:
+        xls_data = f.read()
+    
+    stockSyncer.sync(xls_data)
 
 
 
