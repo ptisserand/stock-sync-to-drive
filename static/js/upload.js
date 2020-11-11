@@ -7,7 +7,6 @@ App.init = (function () {
 	//Init
 	async function handleFileSelect(evt) {
 		const files = evt.target.files; // FileList object
-
 		//files template
 		let template = `${Object.keys(files)
 			.map(file => `<div class="file file--${file}">
@@ -41,9 +40,17 @@ App.init = (function () {
 				if (r.ok === true) {
 					$(`.file--${file}`).querySelector(".progress").classList.remove("active");
 					$(`.file--${file}`).querySelector(".done").classList.add("anim");
+					data = await r.json();
+					$("#result").src = data["image"];
 				} else {
-					
+					try {
+						data = await r.json();
+						$("#result").src = data["image"];
+					} catch (e) {
+						$("#result").src = "https://i.giphy.com/media/RJaUOmpBQAoE4RuWnj/source.gif";
+					}
 				}
+				$("#result").style.display="";
 			} catch (e) {
 				console.log('Huston we have problem...:', e);
 			}
@@ -77,6 +84,9 @@ App.init = (function () {
 		$(".list-files").innerHTML = "";
 		$("footer").classList.remove("hasFiles");
 		$(".importar").classList.remove("active");
+		$("#result").style.display="none";
+		// clear input to allow using the same file
+		$("input").value = '';
 		setTimeout(() => {
 			$("#drop").classList.remove("hidden");
 		}, 500);

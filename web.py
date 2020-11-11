@@ -3,6 +3,7 @@ import pickle
 import os.path
 import sys
 from configparser import ConfigParser
+from random import randrange
 
 from flask import Flask
 from flask import request, redirect, send_from_directory, Response
@@ -20,20 +21,26 @@ OK = [
     "https://i.giphy.com/media/HX3lSnGXZnaWk/giphy.webp"
 ]
 
+def get_failed():
+    id = randrange(0, len(FAILED))
+    return FAILED[id]
+
+def get_ok():
+    id = randrange(0, len(OK))
+    return OK[id]
+
 @app.route("/upload", methods=["POST"])
 def upload_xls():
     print("Upload called")  
     if request.files:
         try:
             xls = request.files["xls"]
-            print(xls)
             xls_data = xls.read()
-            print(len(xls_data))
             # app.stockSyncer.sync(xls_data)
         except Exception as e:
-            return jsonify(error=str(e)), 500
-        return jsonify({})
-    return jsonify(error="Missing file"), 403
+            return jsonify({"image": get_failed(), "error": str(e)}), 500
+        return jsonify({"image": get_ok()})
+    return jsonify({"image": get_failed(), "error": "Missing file"}), 403
 
 @app.route("/", methods=["GET"])
 def home():

@@ -131,7 +131,7 @@ body {
   transform: translateY(0);
   transition: transform .5s .5s ease;
 }
-.upload .upload-files footer .list-files {
+.upload .upload-files footer .list-files .result-images {
   width: 320px;
   margin: 0 auto;
   margin-top: 15px;
