@@ -138,6 +138,5 @@ class StockSyncer(object):
                 # First row is title
                 batch_entry = self._batch_element(row, stock_column_id, product_qty)
                 data.append(batch_entry)
-        print("Batch update")
         result = self._commit_batch(data)
-        print(f"{result}")
+        return result
