@@ -36,7 +36,7 @@ def upload_xls():
         try:
             xls = request.files["xls"]
             xls_data = xls.read()
-            # app.stockSyncer.sync(xls_data)
+            app.stockSyncer.sync(xls_data)
         except Exception as e:
             return jsonify({"image": get_failed(), "error": str(e)}), 500
         return jsonify({"image": get_ok()})
