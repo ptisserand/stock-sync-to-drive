@@ -9,6 +9,12 @@ from google.auth.transport.requests import Request
 from stock_syncer import StockSyncer
 
 
+# If modifying these scopes, delete the file token.pickle.
+SCOPES = [
+    'https://www.googleapis.com/auth/spreadsheets',
+    'https://www.googleapis.com/auth/spreadsheets.readonly'
+]
+
 
 def retrieve_credentials():
     creds = None
@@ -34,24 +40,29 @@ def main(stock_file):
     # The ID and range of a sample spreadsheet (retrieve from config)
     parser = ConfigParser()
     parser.read('./config.ini')
-
-    stockSyncer = StockSyncer(sheetId=parser.get('drive', 'spreadsheet'),
-        IdTitle=parser.get('drive', 'ID_title'),
-        stockTitle=parser.get('drive', 'stock_title'),
-        credentials=creds
-        )
+    drive = {}
+    stock = {}
+    for kk in ['ID_title', 'stock_title', 'price_title']:
+        drive[kk] = parser.get('drive', kk)
+        stock[kk] = parser.get('stock', kk)
+    drive['sheetId'] = parser.get('drive', 'spreadsheet')
+    drive['sheetLabel'] = parser.get('drive', 'sheet_label')
+    drive['quantity_price_title'] = parser.get('drive', 'quantity_price_title')
+    drive['cond_title'] = parser.get('drive', 'cond_title')
+    stockSyncer = StockSyncer(drive=drive,
+                              stock=stock,
+                              credentials=creds
+                              )
 
     # Read stock file
     print("Reading xls file")
     with open(stock_file, 'rb') as f:
         xls_data = f.read()
-    
-    stockSyncer.sync(xls_data)
 
+    stockSyncer.sync(xls_data)
 
 
 if __name__ == '__main__':
 
     stock_file = sys.argv[1]
     main(stock_file)
-
