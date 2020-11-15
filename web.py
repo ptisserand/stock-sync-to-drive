@@ -54,10 +54,19 @@ if __name__ == "__main__":
     parser = ConfigParser()
     parser.read('./config.ini')
 
-    stockSyncer = StockSyncer(sheetId=parser.get('drive', 'spreadsheet'),
-        IdTitle=parser.get('drive', 'ID_title'),
-        stockTitle=parser.get('drive', 'stock_title'),
-        credentials=creds
-        )
+    drive = {}
+    stock = {}
+    for kk in ['ID_title', 'stock_title', 'price_title']:
+        drive[kk] = parser.get('drive', kk)
+        stock[kk] = parser.get('stock', kk)
+    drive['sheetId'] = parser.get('drive', 'spreadsheet')
+    drive['sheetLabel'] = parser.get('drive', 'sheet_label')
+    drive['quantity_price_title'] = parser.get('drive', 'quantity_price_title')
+    drive['cond_title'] = parser.get('drive', 'cond_title')
+    stockSyncer = StockSyncer(drive=drive,
+                              stock=stock,
+                              credentials=creds
+                              )
+                              
     app.stockSyncer = stockSyncer
     app.run()
