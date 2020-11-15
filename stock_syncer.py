@@ -49,36 +49,91 @@ def check_duplicated(values):
     return duplicated_values
 
 
+class DriveDocument(object):
+    def __init__(self, *, sheetId, sheetLabel, credentials):
+        service = build('sheets', 'v4', credentials=credentials)
+        self.sheet = service.spreadsheets()
+        self.sheetId = sheetId
+        self.sheetLabel = sheetLabel
+        self._column_titles = None
+    
+    def retrieve_column(self, column_name, formula=False) -> list:
+        range = f'{self.sheetLabel}!{column_name}:{column_name}'
+        kwargs = {}
+        if formula is True:
+            kwargs['valueRenderOption'] = 'FORMULA'
+        result = self.sheet.values().get(spreadsheetId=self.sheetId,
+            range=range, **kwargs).execute()
+        values = result.get('values', [])
+        data = []
+        # First element is column title
+        for vv in values[1:]:
+            if len(vv) == 1:
+                value = vv[0]
+            else:
+                value = None
+            data.append(value)
+        return data
+    
+    def get_column_ref(self, key: str, refresh: bool=False) -> (str, int):
+        if self._column_titles is None or refresh is True:
+            result = self.sheet.values().get(spreadsheetId=self.sheetId,
+                range=f'{self.sheetLabel}!1:1').execute()
+            values = result.get('values', [])
+            # we retrieve only 1 row
+            values = values[0]
+            self._column_titles = values
+        else:
+            values = self._column_titles
+        try:
+            idx = values.index(key)
+            return col_to_a1(idx), idx
+        except ValueError:
+            return '', -1
+    
+    def batch_element(self, row, col, value) -> dict:
+        range_name = rowcol_to_a1(row, col, sheetLabel=self.sheetLabel)
+        return {
+            'values': [
+                [value]
+            ],
+            'range': range_name
+        }
+    
+    def commit_batch(self, data: list):
+        body = {
+            'valueInputOption': 'USER_ENTERED',
+            'data': data    
+        }
+        result = self.sheet.values().batchUpdate(
+            spreadsheetId=self.sheetId, body=body
+        ).execute()
+        return result
 
 class StockSyncer(object):
     def __init__(self, *, drive: dict, stock: dict, credentials):
         service = build('sheets', 'v4', credentials=credentials)
         # Call the Sheets API
         self.sheet = service.spreadsheets()
-        self.sheetId = drive['sheetId']
-        self.sheetLabel = drive['sheetLabel']
+        self.doc = DriveDocument(sheetId=drive['sheetId'], sheetLabel=drive['sheetLabel'], credentials=credentials)
         self.drive = drive
         self.stock = stock
         self.product_ids = []
         self.product_ids_mapping = {}
         self.drive_column_title = None
+        self._column_title = None
 
 
-    def _retrieve_product_ids(self, idRange=None):
-        if idRange is None:
-            idRange=f'{self.sheetLabel}!A:A'
-        result = self.sheet.values().get(spreadsheetId=self.sheetId,
-            range=idRange).execute()
-        values = result.get('values', [])
+    def _retrieve_product_ids(self):
+        values = self.doc.retrieve_column(column_name='A')
         # Use -1 id for unknown values
         # We skip the first elem since this is column title
         ids = []
         ids_mapping = {}
         idx = 0
-        for vv in values[1:]:
-            if len(vv) == 1:
-                value = vv[0]
-            else:
+        for vv in values:
+            value = vv
+            if vv is None:
                 value = -1
             ids.append(value)
             ids_mapping[value] = idx
@@ -88,55 +143,16 @@ class StockSyncer(object):
         return ids
     
     def _retrieve_column(self, column_name) -> list:
-        range = f'{self.sheetLabel}!{column_name}:{column_name}'
-        result = self.sheet.values().get(spreadsheetId=self.sheetId,
-            range=range).execute()
-        values = result.get('values', [])
-        data = []
-        for vv in values[1:]:
-            if len(vv) == 1:
-                value = vv[0]
-            else:
-                value = None
-            data.append(value)
-        return data
-
+        return self.doc.retrieve_column(column_name=column_name)
 
     def _get_column_ref(self, key: str) -> (str, int):
-        if self.drive_column_title is None:
-            result = self.sheet.values().get(spreadsheetId=self.sheetId,
-                range=f'{self.sheetLabel}!1:1').execute()
-            values = result.get('values', [])
-            # we retrieve only 1 row
-            values = values[0]
-            self.drive_column_title = values
-        else:
-            values = self.drive_column_title
-        try:
-            idx = values.index(key)
-            return col_to_a1(idx), idx
-        except ValueError:
-            return '', -1
+        return self.doc.get_column_ref(key=key)
 
     def _batch_element(self, row, col, value) -> dict:
-        range_name = rowcol_to_a1(row, col, sheetLabel=self.sheetLabel)
-        return {
-            'values': [
-                [value]
-            ],
-            'range': range_name
-        }
-
+        return self.doc.batch_element(row=row, col=col, value=value)
 
     def _commit_batch(self, data: list):
-        body = {
-            'valueInputOption': 'USER_ENTERED',
-            'data': data    
-        }
-        result = self.sheet.values().batchUpdate(
-            spreadsheetId=self.sheetId, body=body
-        ).execute()
-        return result
+        return self.doc.commit_batch(data=data)
     
     def sync(self, xls_data: bytes):
         book = xlrd.open_workbook(file_contents=xls_data)
@@ -184,8 +200,8 @@ class StockSyncer(object):
                     else:
                         batch_entry = self._batch_element(row, quantity_price_column_id, product_price)
                     data.append(batch_entry)
-            except AttributeError:
-                print(f"Issue with an element")
+            except AttributeError as e:
+                print(f"Issue with an element: {e}")
                 count += 1
             
         result = self._commit_batch(data)
