@@ -154,6 +154,13 @@ class StockSyncer(object):
     def _commit_batch(self, data: list):
         return self.doc.commit_batch(data=data)
     
+    def _conditioned_formula(self, row, quantity_price_column_id, cond_column_id):
+        # =AE2*VALUE(REGEXEXTRACT(AG2;"^\s*[0-9]+")) / 1000
+        quantity_price_cell = rowcol_to_a1(row, quantity_price_column_id)
+        cond_cell = rowcol_to_a1(row, cond_column_id)
+        formula = f'={quantity_price_cell} * VALUE(REGEXEXTRACT({cond_cell}; "^\s*[0-9]+")) / 1000'
+        return formula
+
     def sync(self, xls_data: bytes):
         book = xlrd.open_workbook(file_contents=xls_data)
         tmp = pd.read_excel(book, engine='xlrd')
@@ -197,9 +204,13 @@ class StockSyncer(object):
                     data.append(batch_entry)
                     if cond == '1':
                         batch_entry = self._batch_element(row, price_column_id, product_price)
+                        data.append(batch_entry)
                     else:
+                        formula = self._conditioned_formula(row, quantity_price_column_id, cond_column_id)
+                        batch_entry = self._batch_element(row, price_column_id, formula)
+                        data.append(batch_entry)
                         batch_entry = self._batch_element(row, quantity_price_column_id, product_price)
-                    data.append(batch_entry)
+                        data.append(batch_entry)
             except AttributeError as e:
                 print(f"Issue with an element: {e}")
                 count += 1
