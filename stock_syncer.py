@@ -7,6 +7,11 @@ import xlrd
 
 MAGIC_NUMBER = 64
 
+TVA_VALUE_MAPPING = {
+    '__export__.account_tax_4': 'taux-reduit',
+    '__export__.account_tax_2': 'taux-normal',
+}
+
 def col_to_a1(col):
     col = col + 1
     div = col
@@ -161,7 +166,7 @@ class StockSyncer(object):
         formula = f'={quantity_price_cell} * VALUE(REGEXEXTRACT({cond_cell}; "^\s*[0-9]+")) / 1000'
         return formula
 
-    def sync(self, xls_data: bytes):
+    def sync(self, xls_data: bytes, tva: bool=False):
         book = xlrd.open_workbook(file_contents=xls_data)
         tmp = pd.read_excel(book, engine='xlrd')
         stock_keys = [
@@ -169,6 +174,9 @@ class StockSyncer(object):
             self.stock['stock_title'],
             self.stock['price_title']
         ]
+        if tva is True:
+            stock_keys.append(self.stock['TVA_title'])
+        
         stock = tmp[stock_keys]
         print("retrieving drive stock column ref")
         stock_column_name, stock_column_id = self._get_column_ref(self.drive['stock_title'])
@@ -178,6 +186,10 @@ class StockSyncer(object):
         quantity_price_column_name, quantity_price_column_id = self._get_column_ref(self.drive['quantity_price_title'])
         print("Retrieving conditionning column ref")
         cond_column_name, cond_column_id = self._get_column_ref(self.drive['cond_title'])
+        if tva is True:
+            print("Retrieving TVA column ref")
+            tva_column_name, tva_column_id = self._get_column_ref(self.drive['TVA_title'])
+
         print("Retrieving drive product IDs column ref")
         id_column_name, id_column_id = self._get_column_ref(self.drive['ID_title'])
 
@@ -211,6 +223,14 @@ class StockSyncer(object):
                         data.append(batch_entry)
                         batch_entry = self._batch_element(row, quantity_price_column_id, product_price)
                         data.append(batch_entry)
+                    
+                    if tva is True:
+                        tva_value = elem[3]
+                        if tva_value in TVA_VALUE_MAPPING:
+                            tva_value = TVA_VALUE_MAPPING[tva_value]
+                            batch_entry = self._batch_element(row, tva_column_id, tva_value)
+                            data.append(batch_entry)
+
             except AttributeError as e:
                 print(f"Issue with an element: {e}")
                 count += 1
