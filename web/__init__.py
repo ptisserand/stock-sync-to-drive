@@ -30,8 +30,13 @@ def retrieve_configuration():
 def create_app():
     app = Flask(__name__)
     drive, stock, creds =  retrieve_configuration()
+    db_dir = os.getenv('DB_DIR', None)
+
     app.config['SECRET_KEY'] = 'just-another-secret-here'
-    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///db.sqlite'
+    if db_dir is None:
+        app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///db.sqlite'
+    else:
+        app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{db_dir}/db.sqlite'
     app.config['ROB_DRIVE'] = drive
     app.config['ROB_STOCK'] = stock
     app.config['ROB_CREDS'] = creds
