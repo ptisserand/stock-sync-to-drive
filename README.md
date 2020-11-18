@@ -1,5 +1,25 @@
 
-## Add a new user in database
+# vracoop xls export to drive spreadsheet
+
+This repository contains source code to 'import' an xls file exported by [vracoop](http://vracoop.fr/) (based on [ODOO](https://www.odoo.com/)) to a google spreadsheet
+
+
+A standalone script and a web version are available.
+
+## Common configuration
+/!\ TBD /!\ 
+
+## CLI application
+
+Just run stock_update_drive.py with your XLS file as an argument
+
+```bash
+./stock_update_drive.py ./stock.xls 
+```
+## Web application (flask)
+
+
+### Add a new user in database for web application
 
 ```bash
 flask shell
