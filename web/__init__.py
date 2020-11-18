@@ -5,15 +5,16 @@ from configparser import ConfigParser
 from flask import Flask
 from flask_login import LoginManager
 
-main_dir = os.path.dirname(os.path.dirname(__file__))
+MAIN_DIR = os.path.dirname(os.path.dirname(__file__))
 
 def retrieve_configuration():
     creds = None
-    with open(f'{main_dir}/token.pickle', 'rb') as token:
+    config_dir = os.getenv('CONFIG_DIR', MAIN_DIR)
+    with open(f'{config_dir}/token.pickle', 'rb') as token:
         creds = pickle.load(token)
     # The ID and range of a sample spreadsheet (retrieve from config)
     parser = ConfigParser()
-    parser.read(f'{main_dir}/config.ini')
+    parser.read(f'{config_dir}/config.ini')
 
     drive = {}
     stock = {}
