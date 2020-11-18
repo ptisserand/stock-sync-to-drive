@@ -66,7 +66,7 @@ def main(args):
     with open(stock_file, 'rb') as f:
         xls_data = f.read()
 
-    stockSyncer.sync(xls_data, tva=args.tva)
+    stockSyncer.sync(xls_data, tva=args.tva, dry=args.dry)
 
 
 if __name__ == '__main__':
@@ -75,5 +75,6 @@ if __name__ == '__main__':
     parser.add_argument("--token", help="Path to store/retrieve token", required=False)
     parser.add_argument("--enable-tva", help="Enable TVA sync", action="store_true", dest="tva")
     parser.add_argument("--config", help="Path to drive/excel configuration file", required=False, default="config.ini")
+    parser.add_argument("--dry-run", help="Don't commit cell update", action="store_true", dest="dry")
     args = parser.parse_args()
     main(args)

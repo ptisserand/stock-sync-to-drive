@@ -169,7 +169,7 @@ class StockSyncer(object):
         formula = f'={quantity_price_cell} * VALUE(REGEXEXTRACT({cond_cell}; "^\s*[0-9]+")) / 1000'
         return formula
 
-    def sync(self, xls_data: bytes, tva: bool=False):
+    def sync(self, xls_data: bytes, tva: bool=False, dry: bool=False):
         book = xlrd.open_workbook(file_contents=xls_data)
         tmp = pd.read_excel(book, engine='xlrd')
         stock_keys = [
@@ -251,8 +251,12 @@ class StockSyncer(object):
             except AttributeError as e:
                 print(f"Issue with an element: {e}")
                 count += 1
-            
-        result = self._commit_batch(data)
+        
+        if dry is False:
+            result = self._commit_batch(data)
+        else:
+            print("Dry run...")
+            result = None
         print(f"Number of dropped elements: {count}")
         return result
 
