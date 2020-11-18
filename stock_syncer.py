@@ -1,8 +1,9 @@
 
+from math import floor
 from googleapiclient.discovery import build
 import pandas as pd
 import xlrd
-
+import re
 
 
 MAGIC_NUMBER = 64
@@ -11,6 +12,8 @@ TVA_VALUE_MAPPING = {
     '__export__.account_tax_4': 'taux-reduit',
     '__export__.account_tax_2': 'taux-normal',
 }
+
+MASS_RE = re.compile(r'^\s*(?P<mass>[0-9]+)g')
 
 def col_to_a1(col):
     col = col + 1
@@ -212,12 +215,26 @@ class StockSyncer(object):
                     except:
                         print(f"No conditionning for {product_id} [{row}]")
                         continue
-                    batch_entry = self._batch_element(row, stock_column_id, product_qty)
-                    data.append(batch_entry)
                     if cond == '1':
+                        batch_entry = self._batch_element(row, stock_column_id, product_qty)
+                        data.append(batch_entry)
                         batch_entry = self._batch_element(row, price_column_id, product_price)
                         data.append(batch_entry)
                     else:
+                        try:
+                            mass = MASS_RE.match(cond).group('mass')
+                            mass = int(mass)
+                        except AttributeError:
+                            print(f"Attribute Error for {product_id}/{row} '{cond}'")
+                            continue 
+                        if mass == 0:
+                            print(f"Wrong conditionning for {product_id} '{cond}'")
+                            continue
+                        product_units = floor(product_qty * 1000 / mass)
+                        if product_units < 0:
+                            product_units = 0
+                        batch_entry = self._batch_element(row, stock_column_id, product_units)
+                        data.append(batch_entry)
                         formula = self._conditioned_formula(row, quantity_price_column_id, cond_column_id)
                         batch_entry = self._batch_element(row, price_column_id, formula)
                         data.append(batch_entry)
