@@ -1,0 +1,7 @@
+config.ini
+credentials.json
+token.pickle
+stock.xls
+web/db.sqlite
+**/venv
+**/__pycache__
