@@ -45,7 +45,7 @@ main = Blueprint('main', __name__)
 @main.route('/')
 @login_required
 def index():
-    return current_app.send_static_file("html/upload.html")
+    return render_template('upload.html')
 
 
 @main.route("/upload", methods=["POST"])
