@@ -3,3 +3,6 @@ credentials.json
 stock.xls
 token.pickle
 config.ini
+config/
+db/
+web/db.sqlite
