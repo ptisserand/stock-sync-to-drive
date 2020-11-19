@@ -63,6 +63,8 @@ def upload_xls():
             if not creds.valid:
                 if creds.expired and creds.refresh_token:
                     creds.refresh(Request())
+                    # readd in config
+                    current_app.config["ROB_CREDS"] = creds
                 else:
                     return jsonify({"image": get_failed(), "error": "Invalid credentials"}), 500
             stockSyncer = StockSyncer(drive=drive, stock=stock, credentials=creds)
