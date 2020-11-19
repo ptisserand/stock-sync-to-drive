@@ -1,7 +1,7 @@
 version: '3.3'
 services:
   web:
-    build: .
+    image: ptisserand/stock-sync-to-drive:latest
     volumes:
       - ./config:/config
       - ./db:/db
