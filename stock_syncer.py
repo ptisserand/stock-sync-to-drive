@@ -4,7 +4,11 @@ from googleapiclient.discovery import build
 import pandas as pd
 import xlrd
 import re
+from numpy import isnan
 
+import logging
+
+logger = logging.getLogger('syncer')
 
 MAGIC_NUMBER = 64
 
@@ -175,25 +179,27 @@ class StockSyncer(object):
         stock_keys = [
             self.stock['ID_title'],
             self.stock['stock_title'],
-            self.stock['price_title']
+            self.stock['price_title'],
+            self.stock['name_title'],
         ]
         if tva is True:
             stock_keys.append(self.stock['TVA_title'])
         
         stock = tmp[stock_keys]
-        print("retrieving drive stock column ref")
+        logger.info("Retrieving drive columns ref")
+        logger.debug("retrieving drive stock column ref")
         stock_column_name, stock_column_id = self._get_column_ref(self.drive['stock_title'])
-        print("retrieving drive price column ref")
+        logger.debug("retrieving drive price column ref")
         price_column_name, price_column_id = self._get_column_ref(self.drive['price_title'])
-        print("Retrieving drive quantity price column ref")
+        logger.debug("Retrieving drive quantity price column ref")
         quantity_price_column_name, quantity_price_column_id = self._get_column_ref(self.drive['quantity_price_title'])
-        print("Retrieving conditionning column ref")
+        logger.debug("Retrieving conditionning column ref")
         cond_column_name, cond_column_id = self._get_column_ref(self.drive['cond_title'])
         if tva is True:
-            print("Retrieving TVA column ref")
+            logger.debug("Retrieving TVA column ref")
             tva_column_name, tva_column_id = self._get_column_ref(self.drive['TVA_title'])
 
-        print("Retrieving drive product IDs column ref")
+        logger.debug("Retrieving drive product IDs column ref")
         id_column_name, id_column_id = self._get_column_ref(self.drive['ID_title'])
 
         self._retrieve_product_ids()
@@ -201,19 +207,27 @@ class StockSyncer(object):
         
         data = []
         count = 0
+        missing_ids = []
+        missing_conds = []
         for elem in stock.values:
             try:
+                if not isinstance(elem[0], str) or isnan(elem[1]) or isnan(elem[2]):
+                    # empty line skipped
+                    count += 1
+                    continue
                 product_id = elem[0].replace('__export__.product_template_','')
                 product_qty = elem[1]
                 product_price = elem[2]
+                product_name = elem[3]
                 row = self.product_ids_mapping.get(product_id, None)
                 if row is not None:
-                    # print(f"Row: {row}, Id: {product_id}, Qty: {product_qty}")
+                    # logger.debug(f"Row: {row}, Id: {product_id}, Qty: {product_qty}")
                     # First row is title
                     try:
                         cond = product_cond[row]
                     except:
-                        print(f"No conditionning for {product_id} [{row}]")
+                        logger.warning(f"No conditionning for {product_id} [{row}]")
+                        missing_conds.append(product_id)
                         continue
                     if cond == '1':
                         batch_entry = self._batch_element(row, stock_column_id, product_qty)
@@ -225,10 +239,10 @@ class StockSyncer(object):
                             mass = MASS_RE.match(cond).group('mass')
                             mass = int(mass)
                         except AttributeError:
-                            print(f"Attribute Error for {product_id}/{row} '{cond}'")
+                            logger.error(f"Attribute Error for {product_id}/{row} '{cond}'")
                             continue 
                         if mass == 0:
-                            print(f"Wrong conditionning for {product_id} '{cond}'")
+                            logger.error(f"Wrong conditionning for {product_id} '{cond}'")
                             continue
                         product_units = floor(product_qty * 1000 / mass)
                         if product_units < 0:
@@ -240,24 +254,37 @@ class StockSyncer(object):
                         data.append(batch_entry)
                         batch_entry = self._batch_element(row, quantity_price_column_id, product_price)
                         data.append(batch_entry)
-                    
+
                     if tva is True:
                         tva_value = elem[3]
                         if tva_value in TVA_VALUE_MAPPING:
                             tva_value = TVA_VALUE_MAPPING[tva_value]
                             batch_entry = self._batch_element(row, tva_column_id, tva_value)
                             data.append(batch_entry)
+                else:
+                    logger.debug(f"{product_id} not found in drive")
+                    missing_ids.append({'id': product_id, 'name': product_name})
 
             except AttributeError as e:
-                print(f"Issue with an element: {e}")
+                logger.error(f"Issue with an element: {e}")
                 count += 1
         
         if dry is False:
-            result = self._commit_batch(data)
+            result_commit = self._commit_batch(data)
         else:
-            print("Dry run...")
-            result = None
-        print(f"Number of dropped elements: {count}")
+            logger.debug("Dry run...")
+            result_commit = None
+        missing_ids.sort(key=lambda elem: int(elem['id']))
+        missing_conds.sort()
+
+        logger.info(f"Number of dropped elements: {count}")
+        logger.info(f"Number of missing ids: {len(missing_ids)}")
+        logger.info(f"Number of missing conditionning: {len(missing_conds)}")
+        result = {
+            'commit': result_commit,
+            'missing_ids': missing_ids
+        }
         return result
+
 
 
