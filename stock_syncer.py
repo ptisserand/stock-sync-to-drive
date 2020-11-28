@@ -19,6 +19,7 @@ TVA_VALUE_MAPPING = {
 
 MASS_RE = re.compile(r'^\s*(?P<mass>[0-9]+)g')
 
+
 def col_to_a1(col):
     col = col + 1
     div = col
@@ -31,6 +32,7 @@ def col_to_a1(col):
         column_label = chr(mod + MAGIC_NUMBER) + column_label
     label = f'{column_label}'
     return label
+
 
 def rowcol_to_a1(row, col, sheetLabel=None):
     """Translates a row and column cell address to A1 notation.
@@ -53,6 +55,7 @@ def rowcol_to_a1(row, col, sheetLabel=None):
         label = f'{sheetLabel}!{label}'
     return label
 
+
 def check_duplicated(values):
     aserie = pd.Series(values)
     aduplicated = aserie.duplicated()
@@ -68,14 +71,14 @@ class DriveDocument(object):
         self.sheetId = sheetId
         self.sheetLabel = sheetLabel
         self._column_titles = None
-    
+
     def retrieve_column(self, column_name, formula=False) -> list:
         range = f'{self.sheetLabel}!{column_name}:{column_name}'
         kwargs = {}
         if formula is True:
             kwargs['valueRenderOption'] = 'FORMULA'
         result = self.sheet.values().get(spreadsheetId=self.sheetId,
-            range=range, **kwargs).execute()
+                                         range=range, **kwargs).execute()
         values = result.get('values', [])
         data = []
         # First element is column title
@@ -86,11 +89,11 @@ class DriveDocument(object):
                 value = None
             data.append(value)
         return data
-    
-    def get_column_ref(self, key: str, refresh: bool=False) -> (str, int):
+
+    def get_column_ref(self, key: str, refresh: bool = False) -> (str, int):
         if self._column_titles is None or refresh is True:
             result = self.sheet.values().get(spreadsheetId=self.sheetId,
-                range=f'{self.sheetLabel}!1:1').execute()
+                                             range=f'{self.sheetLabel}!1:1').execute()
             values = result.get('values', [])
             # we retrieve only 1 row
             values = values[0]
@@ -102,7 +105,7 @@ class DriveDocument(object):
             return col_to_a1(idx), idx
         except ValueError:
             return '', -1
-    
+
     def batch_element(self, row, col, value) -> dict:
         range_name = rowcol_to_a1(row, col, sheetLabel=self.sheetLabel)
         return {
@@ -111,30 +114,31 @@ class DriveDocument(object):
             ],
             'range': range_name
         }
-    
+
     def commit_batch(self, data: list):
         body = {
             'valueInputOption': 'USER_ENTERED',
-            'data': data    
+            'data': data
         }
         result = self.sheet.values().batchUpdate(
             spreadsheetId=self.sheetId, body=body
         ).execute()
         return result
 
+
 class Stock(object):
     def __init__(self, *, drive: dict, stock: dict, credentials):
         service = build('sheets', 'v4', credentials=credentials)
         # Call the Sheets API
         self.sheet = service.spreadsheets()
-        self.doc = DriveDocument(sheetId=drive['sheetId'], sheetLabel=drive['sheetLabel'], credentials=credentials)
+        self.doc = DriveDocument(
+            sheetId=drive['sheetId'], sheetLabel=drive['sheetLabel'], credentials=credentials)
         self.drive = drive
         self.stock = stock
         self.product_ids = []
         self.product_ids_mapping = {}
         self.drive_column_title = None
         self._column_title = None
-
 
     def _retrieve_product_ids(self):
         values = self.doc.retrieve_column(column_name='A')
@@ -153,7 +157,7 @@ class Stock(object):
         self.product_ids = ids
         self.product_ids_mapping = ids_mapping
         return ids
-    
+
     def _retrieve_column(self, column_name) -> list:
         return self.doc.retrieve_column(column_name=column_name)
 
@@ -165,7 +169,7 @@ class Stock(object):
 
     def _commit_batch(self, data: list):
         return self.doc.commit_batch(data=data)
-    
+
     def _conditioned_formula(self, row, quantity_price_column_id, cond_column_id):
         # =AE2*VALUE(REGEXEXTRACT(AG2;"^\s*[0-9]+")) / 1000
         quantity_price_cell = rowcol_to_a1(row, quantity_price_column_id)
@@ -173,8 +177,9 @@ class Stock(object):
         formula = f'={quantity_price_cell} * VALUE(REGEXEXTRACT({cond_cell}; "^\s*[0-9]+")) / 1000'
         return formula
 
+
 class StockSyncer(Stock):
-    def sync(self, xls_data: bytes, tva: bool=False, dry: bool=False):
+    def sync(self, xls_data: bytes, tva: bool = False, dry: bool = False):
         book = xlrd.open_workbook(file_contents=xls_data)
         tmp = pd.read_excel(book, engine='xlrd')
         stock_keys = [
@@ -185,27 +190,33 @@ class StockSyncer(Stock):
         ]
         if tva is True:
             stock_keys.append(self.stock['TVA_title'])
-        
+
         stock = tmp[stock_keys]
         logger.info("Retrieving drive columns ref")
         logger.debug("retrieving drive stock column ref")
-        stock_column_name, stock_column_id = self._get_column_ref(self.drive['stock_title'])
+        stock_column_name, stock_column_id = self._get_column_ref(
+            self.drive['stock_title'])
         logger.debug("retrieving drive price column ref")
-        price_column_name, price_column_id = self._get_column_ref(self.drive['price_title'])
+        price_column_name, price_column_id = self._get_column_ref(
+            self.drive['price_title'])
         logger.debug("Retrieving drive quantity price column ref")
-        quantity_price_column_name, quantity_price_column_id = self._get_column_ref(self.drive['quantity_price_title'])
+        quantity_price_column_name, quantity_price_column_id = self._get_column_ref(
+            self.drive['quantity_price_title'])
         logger.debug("Retrieving conditionning column ref")
-        cond_column_name, cond_column_id = self._get_column_ref(self.drive['cond_title'])
+        cond_column_name, cond_column_id = self._get_column_ref(
+            self.drive['cond_title'])
         if tva is True:
             logger.debug("Retrieving TVA column ref")
-            tva_column_name, tva_column_id = self._get_column_ref(self.drive['TVA_title'])
+            tva_column_name, tva_column_id = self._get_column_ref(
+                self.drive['TVA_title'])
 
         logger.debug("Retrieving drive product IDs column ref")
-        id_column_name, id_column_id = self._get_column_ref(self.drive['ID_title'])
+        id_column_name, id_column_id = self._get_column_ref(
+            self.drive['ID_title'])
 
         self._retrieve_product_ids()
         product_cond = self._retrieve_column(column_name=cond_column_name)
-        
+
         data = []
         count = 0
         missing_ids = []
@@ -216,7 +227,8 @@ class StockSyncer(Stock):
                     # empty line skipped
                     count += 1
                     continue
-                product_id = elem[0].replace('__export__.product_template_','')
+                product_id = elem[0].replace(
+                    '__export__.product_template_', '')
                 product_qty = elem[1]
                 product_price = elem[2]
                 product_name = elem[3]
@@ -227,50 +239,61 @@ class StockSyncer(Stock):
                     try:
                         cond = product_cond[row]
                     except:
-                        logger.warning(f"No conditionning for {product_id} [{row}]")
+                        logger.warning(
+                            f"No conditionning for {product_id} [{row}]")
                         missing_conds.append(product_id)
                         continue
                     if cond == '1':
-                        batch_entry = self._batch_element(row, stock_column_id, product_qty)
+                        batch_entry = self._batch_element(
+                            row, stock_column_id, product_qty)
                         data.append(batch_entry)
-                        batch_entry = self._batch_element(row, price_column_id, product_price)
+                        batch_entry = self._batch_element(
+                            row, price_column_id, product_price)
                         data.append(batch_entry)
                     else:
                         try:
                             mass = MASS_RE.match(cond).group('mass')
                             mass = int(mass)
                         except AttributeError:
-                            logger.error(f"Attribute Error for {product_id}/{row} '{cond}'")
-                            continue 
+                            logger.error(
+                                f"Attribute Error for {product_id}/{row} '{cond}'")
+                            continue
                         if mass == 0:
-                            logger.error(f"Wrong conditionning for {product_id} '{cond}'")
+                            logger.error(
+                                f"Wrong conditionning for {product_id} '{cond}'")
                             continue
                         product_units = floor(product_qty * 1000 / mass)
                         if product_units < 0:
                             product_units = 0
-                        batch_entry = self._batch_element(row, stock_column_id, product_units)
+                        batch_entry = self._batch_element(
+                            row, stock_column_id, product_units)
                         data.append(batch_entry)
-                        formula = self._conditioned_formula(row, quantity_price_column_id, cond_column_id)
-                        batch_entry = self._batch_element(row, price_column_id, formula)
+                        formula = self._conditioned_formula(
+                            row, quantity_price_column_id, cond_column_id)
+                        batch_entry = self._batch_element(
+                            row, price_column_id, formula)
                         data.append(batch_entry)
-                        batch_entry = self._batch_element(row, quantity_price_column_id, product_price)
+                        batch_entry = self._batch_element(
+                            row, quantity_price_column_id, product_price)
                         data.append(batch_entry)
 
                     if tva is True:
                         tva_value = elem[3]
                         if tva_value in TVA_VALUE_MAPPING:
                             tva_value = TVA_VALUE_MAPPING[tva_value]
-                            batch_entry = self._batch_element(row, tva_column_id, tva_value)
+                            batch_entry = self._batch_element(
+                                row, tva_column_id, tva_value)
                             data.append(batch_entry)
                 else:
                     if product_qty > 0:
                         logger.debug(f"{product_id} not found in drive")
-                        missing_ids.append({'id': product_id, 'name': product_name})
+                        missing_ids.append(
+                            {'id': product_id, 'name': product_name})
 
             except AttributeError as e:
                 logger.error(f"Issue with an element: {e}")
                 count += 1
-        
+
         if dry is False:
             result_commit = self._commit_batch(data)
         else:
@@ -297,18 +320,20 @@ class StockCheckerID(Stock):
             self.stock['ID_title'],
             self.stock['name_title'],
         ]
-        
+
         stock = tmp[stock_keys]
         logger.info("Retrieving drive columns ref")
         logger.debug("retrieving drive name column ref")
-        name_column_name, name_column_id = self._get_column_ref(self.drive['name_title'])
+        name_column_name, name_column_id = self._get_column_ref(
+            self.drive['name_title'])
 
         logger.debug("Retrieving drive product IDs column ref")
-        id_column_name, id_column_id = self._get_column_ref(self.drive['ID_title'])
+        id_column_name, id_column_id = self._get_column_ref(
+            self.drive['ID_title'])
 
         self._retrieve_product_ids()
         product_names = self._retrieve_column(column_name=name_column_name)
-        
+
         data = []
         count = 0
         matching = []
@@ -318,7 +343,8 @@ class StockCheckerID(Stock):
                     # empty line skipped
                     count += 1
                     continue
-                product_id = elem[0].replace('__export__.product_template_','')
+                product_id = elem[0].replace(
+                    '__export__.product_template_', '')
                 product_name = elem[1]
                 row = self.product_ids_mapping.get(product_id, None)
                 if row is not None:
@@ -338,10 +364,49 @@ class StockCheckerID(Stock):
             except AttributeError as e:
                 logger.error(f"Issue with an element: {e}")
                 count += 1
-        
+
         matching.sort(key=lambda elem: int(elem['id']))
         result = {
             'names': matching
         }
         return result
 
+    def extra(self, xls_data: bytes):
+        book = xlrd.open_workbook(file_contents=xls_data)
+        tmp = pd.read_excel(book, engine='xlrd')
+        stock_keys = [
+            self.stock['ID_title'],
+        ]
+
+        stock = tmp[stock_keys]
+
+        logger.info("Retrieving drive columns ref")
+        logger.debug("retrieving drive name column ref")
+        name_column_name, name_column_id = self._get_column_ref(
+            self.drive['name_title'])
+
+        logger.debug("Retrieving drive product IDs column ref")
+        id_column_name, id_column_id = self._get_column_ref(
+            self.drive['ID_title'])
+
+        self._retrieve_product_ids()
+        product_names = self._retrieve_column(column_name=name_column_name)
+
+        count = 0
+        extra = []
+        vrac_ids = []
+        for elem in stock.values:
+            if not isinstance(elem[0], str):
+                continue
+            vrac_ids.append(elem[0].replace('__export__.product_template_', ''))
+        
+        for product_id in self.product_ids:
+            row = self.product_ids_mapping.get(product_id, None)
+            if not product_id in vrac_ids:
+                logger.warn(f"Row: {row}, Id: {product_id}")
+                extra.append({"row": row, "id": product_id})
+
+        result = {
+            'extra': extra
+        }
+        return result
