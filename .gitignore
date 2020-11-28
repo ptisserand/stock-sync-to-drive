@@ -2,6 +2,7 @@
 credentials.json
 token.pickle
 config.ini
+config.prod.ini
 config/
 db/
 web/db.sqlite
