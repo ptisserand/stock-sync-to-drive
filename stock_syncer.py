@@ -122,7 +122,7 @@ class DriveDocument(object):
         ).execute()
         return result
 
-class StockSyncer(object):
+class Stock(object):
     def __init__(self, *, drive: dict, stock: dict, credentials):
         service = build('sheets', 'v4', credentials=credentials)
         # Call the Sheets API
@@ -173,6 +173,7 @@ class StockSyncer(object):
         formula = f'={quantity_price_cell} * VALUE(REGEXEXTRACT({cond_cell}; "^\s*[0-9]+")) / 1000'
         return formula
 
+class StockSyncer(Stock):
     def sync(self, xls_data: bytes, tva: bool=False, dry: bool=False):
         book = xlrd.open_workbook(file_contents=xls_data)
         tmp = pd.read_excel(book, engine='xlrd')
@@ -262,8 +263,9 @@ class StockSyncer(object):
                             batch_entry = self._batch_element(row, tva_column_id, tva_value)
                             data.append(batch_entry)
                 else:
-                    logger.debug(f"{product_id} not found in drive")
-                    missing_ids.append({'id': product_id, 'name': product_name})
+                    if product_qty > 0:
+                        logger.debug(f"{product_id} not found in drive")
+                        missing_ids.append({'id': product_id, 'name': product_name})
 
             except AttributeError as e:
                 logger.error(f"Issue with an element: {e}")
@@ -287,4 +289,59 @@ class StockSyncer(object):
         return result
 
 
+class StockCheckerID(Stock):
+    def check(self, xls_data: bytes):
+        book = xlrd.open_workbook(file_contents=xls_data)
+        tmp = pd.read_excel(book, engine='xlrd')
+        stock_keys = [
+            self.stock['ID_title'],
+            self.stock['name_title'],
+        ]
+        
+        stock = tmp[stock_keys]
+        logger.info("Retrieving drive columns ref")
+        logger.debug("retrieving drive name column ref")
+        name_column_name, name_column_id = self._get_column_ref(self.drive['name_title'])
+
+        logger.debug("Retrieving drive product IDs column ref")
+        id_column_name, id_column_id = self._get_column_ref(self.drive['ID_title'])
+
+        self._retrieve_product_ids()
+        product_names = self._retrieve_column(column_name=name_column_name)
+        
+        data = []
+        count = 0
+        matching = []
+        for elem in stock.values:
+            try:
+                if not isinstance(elem[0], str) or not isinstance(elem[1], str):
+                    # empty line skipped
+                    count += 1
+                    continue
+                product_id = elem[0].replace('__export__.product_template_','')
+                product_name = elem[1]
+                row = self.product_ids_mapping.get(product_id, None)
+                if row is not None:
+                    # logger.debug(f"Row: {row}, Id: {product_id}, Qty: {product_qty}")
+                    # First row is title
+                    try:
+                        name = product_names[row]
+                        if name != product_name:
+                            matching.append({
+                                'id': product_id,
+                                'vrac_name': product_name,
+                                'drive_name': name
+                            })
+                    except:
+                        logger.warning(f"No name for {product_id} [{row}]")
+
+            except AttributeError as e:
+                logger.error(f"Issue with an element: {e}")
+                count += 1
+        
+        matching.sort(key=lambda elem: int(elem['id']))
+        result = {
+            'names': matching
+        }
+        return result
 
