@@ -19,13 +19,14 @@ main_dir = os.path.dirname(os.path.dirname(__file__))
 sys.path.append(main_dir)
 
 FAILED = [
-    "https://i.giphy.com/media/MVgLEacpr9KVK172Ne/giphy.webp",
-    "https://i.giphy.com/media/RJaUOmpBQAoE4RuWnj/source.gif"
+    "https://i.giphy.com/media/MVgLEacpr9KVK172Ne/giphy.gif",
+    "https://i.giphy.com/media/RJaUOmpBQAoE4RuWnj/giphy.gif"
 ]
 
 OK = [
-    "https://i.giphy.com/media/Q732zaivQ5y9aECIPd/giphy.webp",
-    "https://i.giphy.com/media/HX3lSnGXZnaWk/giphy.webp"
+    "https://i.giphy.com/media/Q732zaivQ5y9aECIPd/giphy.gif",
+    "https://i.giphy.com/media/HX3lSnGXZnaWk/giphy.gif",
+    "https://i.giphy.com/media/lxcz7ntpCKJfq/giphy.gif"
 ]
 
 
@@ -54,7 +55,8 @@ def upload_xls():
     print("Upload called")
     drive = current_app.config['ROB_DRIVE']
     stock = current_app.config['ROB_STOCK']
-    creds = current_app.config['ROB_CREDS']    
+    creds = current_app.config['ROB_CREDS']
+    dry_run = drive['dry_run']
     if request.files:
         try:
             xls = request.files["xls"]
@@ -68,8 +70,8 @@ def upload_xls():
                 else:
                     return jsonify({"image": get_failed(), "error": "Invalid credentials"}), 500
             stockSyncer = StockSyncer(drive=drive, stock=stock, credentials=creds)
-            result = stockSyncer.sync(xls_data)
+            result = stockSyncer.sync(xls_data, dry=dry_run)
         except Exception as e:
             return jsonify({"image": get_failed(), "error": str(e)}), 500
-        return jsonify({"image": get_ok()})
+        return jsonify({"image": get_ok(), "missing_ids": result["missing_ids"]})
     return jsonify({"image": get_failed(), "error": "Missing file"}), 403

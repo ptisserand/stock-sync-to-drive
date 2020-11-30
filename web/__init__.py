@@ -32,6 +32,7 @@ def retrieve_configuration():
     drive['sheetLabel'] = parser.get('drive', 'sheet_label')
     drive['quantity_price_title'] = parser.get('drive', 'quantity_price_title')
     drive['cond_title'] = parser.get('drive', 'cond_title')
+    drive['dry_run'] = parser.getboolean('drive', 'dry_run', fallback=False)
     return drive, stock, creds
 
 def create_app():
