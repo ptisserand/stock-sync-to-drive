@@ -1,9 +1,14 @@
 import os
 import pickle
 from configparser import ConfigParser
+import logging
 
 from flask import Flask
 from flask_login import LoginManager
+from flask.logging import default_handler
+
+root = logging.getLogger()
+root.addHandler(default_handler)
 
 MAIN_DIR = os.path.dirname(os.path.dirname(__file__))
 
@@ -21,6 +26,8 @@ def retrieve_configuration():
     for kk in ['ID_title', 'stock_title', 'price_title']:
         drive[kk] = parser.get('drive', kk)
         stock[kk] = parser.get('stock', kk)
+    stock['name_title'] = parser.get('stock', 'name_title')
+
     drive['sheetId'] = parser.get('drive', 'spreadsheet')
     drive['sheetLabel'] = parser.get('drive', 'sheet_label')
     drive['quantity_price_title'] = parser.get('drive', 'quantity_price_title')
