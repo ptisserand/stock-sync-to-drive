@@ -54,6 +54,7 @@ App.init = (function () {
 						tr.appendChild(product_name);
 						$("#missing").appendChild(tr);
 					}
+					$("#missing").style.display="";
 				} else {
 					try {
 						data = await r.json();
