@@ -66,7 +66,9 @@ def check_duplicated(values):
 
 class DriveDocument(object):
     def __init__(self, *, sheetId, sheetLabel, credentials):
-        service = build('sheets', 'v4', credentials=credentials)
+        # see
+        # https://stackoverflow.com/questions/40154672/importerror-file-cache-is-unavailable-when-using-python-client-for-google-ser
+        service = build('sheets', 'v4', credentials=credentials, cache_discovery=False)
         self.sheet = service.spreadsheets()
         self.sheetId = sheetId
         self.sheetLabel = sheetLabel
@@ -128,9 +130,7 @@ class DriveDocument(object):
 
 class Stock(object):
     def __init__(self, *, drive: dict, stock: dict, credentials):
-        service = build('sheets', 'v4', credentials=credentials)
         # Call the Sheets API
-        self.sheet = service.spreadsheets()
         self.doc = DriveDocument(
             sheetId=drive['sheetId'], sheetLabel=drive['sheetLabel'], credentials=credentials)
         self.drive = drive
