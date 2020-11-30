@@ -42,6 +42,18 @@ App.init = (function () {
 					$(`.file--${file}`).querySelector(".done").classList.add("anim");
 					data = await r.json();
 					$("#result").src = data["image"];
+					missing_ids = data["missing_ids"];
+					for (let i = 0; i < missing_ids.length; i++) {
+						missing = missing_ids[i];
+						tr = document.createElement("tr");
+						product_id = document.createElement("td");
+						product_id.appendChild(document.createTextNode(missing.id));
+						product_name = document.createElement("td");
+						product_name.appendChild(document.createTextNode(missing.name));
+						tr.appendChild(product_id);
+						tr.appendChild(product_name);
+						$("#missing").appendChild(tr);
+					}
 				} else {
 					try {
 						data = await r.json();
@@ -85,6 +97,8 @@ App.init = (function () {
 		$("footer").classList.remove("hasFiles");
 		$(".importar").classList.remove("active");
 		$("#result").style.display="none";
+		$("#missing").style.display="none";
+		$("#missing").innerHTML = "";
 		// clear input to allow using the same file
 		$("input").value = '';
 		setTimeout(() => {
