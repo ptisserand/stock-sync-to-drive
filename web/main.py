@@ -46,7 +46,9 @@ main = Blueprint('main', __name__)
 @main.route('/')
 @login_required
 def index():
-    return render_template('upload.html')
+    drive = current_app.config['ROB_DRIVE']
+    spreadsheet_url = f"https://docs.google.com/spreadsheets/d/{drive['sheetId']}"
+    return render_template('upload.html', spreadsheet_url=spreadsheet_url)
 
 
 @main.route("/upload", methods=["POST"])
