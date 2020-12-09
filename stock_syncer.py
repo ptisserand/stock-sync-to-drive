@@ -182,7 +182,7 @@ class Stock(object):
 
 
 class StockSyncer(Stock):
-    def sync(self, xls_data: bytes, tva: bool = False, dry: bool = False):
+    def sync(self, xls_data: bytes, dry: bool = False):
         book = xlrd.open_workbook(file_contents=xls_data)
         tmp = pd.read_excel(book, engine='xlrd')
         stock_keys = [
@@ -191,6 +191,13 @@ class StockSyncer(Stock):
             self.stock['price_title'],
             self.stock['name_title'],
         ]
+        tva_key = self.stock.get('TVA_title', None)
+        tva = False
+        if tva_key is not None:
+            wait = tmp.get(tva_key, None)
+            if wait is not None:
+                logger.info("TVA enabled")
+                tva = True
         if tva is True:
             stock_keys.append(self.stock['TVA_title'])
 
@@ -248,9 +255,9 @@ class StockSyncer(Stock):
                         continue
                     if cond is None:
                         logger.warning(
-                            f"Wrong conditionning for {product_id} [{row}]")
+                            f"Force conditionning for {product_id} [{row}]")
                         missing_conds.append(product_id)
-                        continue
+                        cond = '1'
                     if cond == '1':
                         batch_entry = self._batch_element(
                             row, stock_column_id, product_qty)
