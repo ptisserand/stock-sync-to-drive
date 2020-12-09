@@ -162,7 +162,10 @@ class Stock(object):
         return self.doc.retrieve_column(column_name=column_name)
 
     def _get_column_ref(self, key: str) -> (str, int):
-        return self.doc.get_column_ref(key=key)
+        name, id = self.doc.get_column_ref(key=key)
+        if id == -1:
+            logger.error(f"Error retrieving column {key}")
+        return name, id
 
     def _batch_element(self, row, col, value) -> dict:
         return self.doc.batch_element(row=row, col=col, value=value)
@@ -241,6 +244,11 @@ class StockSyncer(Stock):
                     except:
                         logger.warning(
                             f"No conditionning for {product_id} [{row}]")
+                        missing_conds.append(product_id)
+                        continue
+                    if cond is None:
+                        logger.warning(
+                            f"Wrong conditionning for {product_id} [{row}]")
                         missing_conds.append(product_id)
                         continue
                     if cond == '1':
@@ -410,3 +418,29 @@ class StockCheckerID(Stock):
             'extra': extra
         }
         return result
+
+class StockImage(Stock):
+    def doit(self, images_mapping: dict, dry: bool=False):
+        logger.debug("Retrieving images title column ref")
+        images_column_name, images_column_id = self._get_column_ref(self.drive['images_title'])
+
+        self._retrieve_product_ids()
+        data = []
+        for ugs, url in images_mapping.items():
+            row = self.product_ids_mapping.get(ugs, None)
+            if row is not None:
+                batch_entry = self._batch_element(
+                    row, images_column_id, url
+                )
+                data.append(batch_entry)
+            else:
+                logger.info(f"UGS ({ugs}) not found")
+        if not dry:
+            result_commit = self._commit_batch(data)
+        else:
+            result_commit = []
+        return result_commit
+
+
+
+                
