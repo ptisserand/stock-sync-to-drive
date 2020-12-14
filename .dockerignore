@@ -1,6 +1,8 @@
+config/**
 config.ini
 config.prod.ini
 credentials.json
+db/**
 token.pickle
 web/db.sqlite
 **/venv
