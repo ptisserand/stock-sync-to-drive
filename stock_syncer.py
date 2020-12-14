@@ -17,7 +17,7 @@ TVA_VALUE_MAPPING = {
     '__export__.account_tax_2': 'taux-normal',
 }
 
-MASS_RE = re.compile(r'^\s*(?P<mass>[0-9]+)g')
+MASS_RE = re.compile(r'^\s*(?P<mass>[0-9]+)(g|ml)')
 
 
 def col_to_a1(col):
@@ -173,12 +173,21 @@ class Stock(object):
     def _commit_batch(self, data: list):
         return self.doc.commit_batch(data=data)
 
-    def _conditioned_formula(self, row, quantity_price_column_id, cond_column_id):
+    def _conditioned_formula(self, *, row, quantity_price_column_id, cond_column_id):
         # =AE2*VALUE(REGEXEXTRACT(AG2;"^\s*[0-9]+")) / 1000
         quantity_price_cell = rowcol_to_a1(row, quantity_price_column_id)
         cond_cell = rowcol_to_a1(row, cond_column_id)
         formula = f'={quantity_price_cell} * VALUE(REGEXEXTRACT({cond_cell}; "^\s*[0-9]+")) / 1000'
         return formula
+    
+    def _quantity_price_formula(self, *, row, price_column_id, cond_column_id):
+        price_cell = rowcol_to_a1(row, price_column_id)
+        cond_cell = rowcol_to_a1(row, cond_column_id)
+        formula = f'=ROUND({price_cell} * 1000 / VALUE(REGEXEXTRACT({cond_cell}; "^\s*[0-9]+")); 2)'
+        return formula
+    
+
+
 
 
 class StockSyncer(Stock):
@@ -190,6 +199,7 @@ class StockSyncer(Stock):
             self.stock['stock_title'],
             self.stock['price_title'],
             self.stock['name_title'],
+            self.stock['by_unit_title']
         ]
         tva_key = self.stock.get('TVA_title', None)
         tva = False
@@ -203,24 +213,24 @@ class StockSyncer(Stock):
 
         stock = tmp[stock_keys]
         logger.info("Retrieving drive columns ref")
-        logger.debug("retrieving drive stock column ref")
+        logger.debug(f"Retrieving drive stock column ref {self.drive['stock_title']}")
         stock_column_name, stock_column_id = self._get_column_ref(
             self.drive['stock_title'])
-        logger.debug("retrieving drive price column ref")
+        logger.debug(f"Retrieving drive price column ref {self.drive['price_title']}")
         price_column_name, price_column_id = self._get_column_ref(
             self.drive['price_title'])
-        logger.debug("Retrieving drive quantity price column ref")
+        logger.debug(f"Retrieving drive quantity price column ref {self.drive['quantity_price_title']}")
         quantity_price_column_name, quantity_price_column_id = self._get_column_ref(
             self.drive['quantity_price_title'])
-        logger.debug("Retrieving conditionning column ref")
+        logger.debug(f"Retrieving conditionning column ref {self.drive['cond_title']}")
         cond_column_name, cond_column_id = self._get_column_ref(
             self.drive['cond_title'])
         if tva is True:
-            logger.debug("Retrieving TVA column ref")
+            logger.debug(f"Retrieving TVA column ref {self.drive['TVA_title']}")
             tva_column_name, tva_column_id = self._get_column_ref(
                 self.drive['TVA_title'])
 
-        logger.debug("Retrieving drive product IDs column ref")
+        logger.debug(f"Retrieving drive product IDs column ref {self.drive['ID_title']}")
         id_column_name, id_column_id = self._get_column_ref(
             self.drive['ID_title'])
 
@@ -242,6 +252,7 @@ class StockSyncer(Stock):
                 product_qty = elem[1]
                 product_price = elem[2]
                 product_name = elem[3]
+                product_by_unit = elem[4]
                 row = self.product_ids_mapping.get(product_id, None)
                 if row is not None:
                     # logger.debug(f"Row: {row}, Id: {product_id}, Qty: {product_qty}")
@@ -252,18 +263,19 @@ class StockSyncer(Stock):
                         logger.warning(
                             f"No conditionning for {product_id} [{row}]")
                         missing_conds.append(product_id)
-                        continue
-                    if cond is None:
-                        logger.warning(
-                            f"Force conditionning for {product_id} [{row}]")
-                        missing_conds.append(product_id)
-                        cond = '1'
-                    if cond == '1':
+
+                    
+                    if product_by_unit == 0.0:
+                        # Product sell by unit
                         batch_entry = self._batch_element(
                             row, stock_column_id, product_qty)
                         data.append(batch_entry)
                         batch_entry = self._batch_element(
                             row, price_column_id, product_price)
+                        data.append(batch_entry)
+                        formula = self._quantity_price_formula(row=row, price_column_id=price_column_id, cond_column_id=cond_column_id)
+                        batch_entry = self._batch_element(
+                            row, quantity_price_column_id, formula)
                         data.append(batch_entry)
                     else:
                         try:
@@ -284,7 +296,7 @@ class StockSyncer(Stock):
                             row, stock_column_id, product_units)
                         data.append(batch_entry)
                         formula = self._conditioned_formula(
-                            row, quantity_price_column_id, cond_column_id)
+                            row=row, quantity_price_column_id=quantity_price_column_id, cond_column_id=cond_column_id)
                         batch_entry = self._batch_element(
                             row, price_column_id, formula)
                         data.append(batch_entry)
