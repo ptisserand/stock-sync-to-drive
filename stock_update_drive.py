@@ -65,7 +65,7 @@ def main(args):
         stock[kk] = parser.get('stock', kk)
     
     stock['name_title'] = parser.get('stock', 'name_title')
-
+    stock['by_unit_title'] = parser.get('stock', 'by_unit_title')
 
     drive['quantity_price_title'] = parser.get('drive', 'quantity_price_title')
     drive['cond_title'] = parser.get('drive', 'cond_title')
