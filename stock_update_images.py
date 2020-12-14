@@ -41,7 +41,6 @@ def retrieve_credentials(token_path='token.pickle'):
 
 
 def main(args):
-    urls_file = args.urls
     kwargs = {}
 
     if args.token:
@@ -67,10 +66,11 @@ def main(args):
                               )
 
     # Read stock file
-    urls_file = './result.lst'
+    urls_file = args.urls
     images_mapping = {}
     with open(urls_file, 'r') as f:
         lines = f.read().split('\n')
+    logger.debug(f"Number of lines: {len(lines)}")
     for line in lines:
         if line == '':
             continue
@@ -78,7 +78,7 @@ def main(args):
         ugs = name.split('-')[0]
         url = url.strip()
         images_mapping[ugs] = url
-
+    logger.info(f"Number of images: {len(images_mapping)}")
     result = stockImage.doit(images_mapping=images_mapping)
     print(f"{result}")
 
