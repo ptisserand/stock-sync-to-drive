@@ -29,6 +29,16 @@
                 "stock.xls", "--dry-run"
             ],
             "console": "integratedTerminal"
+        },
+        {
+            "name": "Script dryrun prod",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/stock_update_drive.py",
+            "args": [
+                "stock.xls", "--dry-run", "--config", "./config.prod.ini"
+            ],
+            "console": "integratedTerminal"
         }
     ]
 }
