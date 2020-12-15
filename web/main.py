@@ -13,6 +13,9 @@ from flask_login import (
 
 from google.auth.transport.requests import Request
 
+import logging
+logger = logging.getLogger("main")
+
 # XXX path hack
 import sys
 main_dir = os.path.dirname(os.path.dirname(__file__))
@@ -54,7 +57,7 @@ def index():
 @main.route("/upload", methods=["POST"])
 @login_required
 def upload_xls():
-    print("Upload called")
+    logger.info("Upload called")
     drive = current_app.config['ROB_DRIVE']
     stock = current_app.config['ROB_STOCK']
     creds = current_app.config['ROB_CREDS']
@@ -65,15 +68,19 @@ def upload_xls():
             xls_data = xls.read()
             # refresh creds is needed
             if not creds.valid:
+                logger.warning("Invalid creds")
                 if creds.expired and creds.refresh_token:
+                    logger.info("Try to refresh credentials")
                     creds.refresh(Request())
                     # readd in config
                     current_app.config["ROB_CREDS"] = creds
                 else:
+                    logger.error("Invalid credentials")
                     return jsonify({"image": get_failed(), "error": "Invalid credentials"}), 500
             stockSyncer = StockSyncer(drive=drive, stock=stock, credentials=creds)
             result = stockSyncer.sync(xls_data, dry=dry_run)
         except Exception as e:
+            logger.error(f"Exception: {e}")
             return jsonify({"image": get_failed(), "error": str(e)}), 500
         return jsonify({"image": get_ok(), "missing_ids": result["missing_ids"]})
     return jsonify({"image": get_failed(), "error": "Missing file"}), 403

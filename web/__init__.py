@@ -18,15 +18,18 @@ def retrieve_configuration():
     with open(f'{config_dir}/token.pickle', 'rb') as token:
         creds = pickle.load(token)
     # The ID and range of a sample spreadsheet (retrieve from config)
+    root.debug("Reading configuration")
     parser = ConfigParser()
     parser.read(f'{config_dir}/config.ini')
 
+    root.info("Parsing ini configuration")
     drive = {}
     stock = {}
     for kk in ['ID_title', 'stock_title', 'price_title']:
         drive[kk] = parser.get('drive', kk)
         stock[kk] = parser.get('stock', kk)
     stock['name_title'] = parser.get('stock', 'name_title')
+    stock['by_unit_title'] = parser.get('stock', 'by_unit_title')
 
     drive['sheetId'] = parser.get('drive', 'spreadsheet')
     drive['sheetLabel'] = parser.get('drive', 'sheet_label')
