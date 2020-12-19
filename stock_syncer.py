@@ -185,7 +185,7 @@ class Stock(object):
     def _quantity_price_formula(self, *, row, price_column_id, cond_column_id):
         price_cell = rowcol_to_a1(row, price_column_id)
         cond_cell = rowcol_to_a1(row, cond_column_id)
-        formula = f'=ROUND({price_cell} * 1000 / VALUE(REGEXEXTRACT({cond_cell}; "^\s*[0-9]+")); 2)'
+        formula = f'=IFERROR(ROUND({price_cell} * 1000 / VALUE(REGEXEXTRACT({cond_cell}; "^\s*[0-9]+")); 2); "N/A")'
         return formula
 
 
