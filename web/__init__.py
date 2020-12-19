@@ -36,6 +36,9 @@ def retrieve_configuration():
     drive['quantity_price_title'] = parser.get('drive', 'quantity_price_title')
     drive['cond_title'] = parser.get('drive', 'cond_title')
     drive['dry_run'] = parser.getboolean('drive', 'dry_run', fallback=False)
+    
+    drive["errors_sheet"] = parser.get("drive", "errors_sheet_label")
+    drive["missing_UGS_title"] = parser.get("drive", "missing_UGS_title")
     return drive, stock, creds
 
 def create_app():
