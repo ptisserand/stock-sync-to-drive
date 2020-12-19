@@ -68,6 +68,10 @@ def main(args):
 
     drive["quantity_price_title"] = parser.get("drive", "quantity_price_title")
     drive["cond_title"] = parser.get("drive", "cond_title")
+
+    drive["errors_sheet"] = parser.get("drive", "errors_sheet_label")
+    drive["missing_UGS_title"] = parser.get("drive", "missing_UGS_title")
+
     stockSyncer = StockSyncer(drive=drive, stock=stock, credentials=creds)
 
     # Read stock file
@@ -75,7 +79,7 @@ def main(args):
     with open(stock_file, "rb") as f:
         xls_data = f.read()
 
-    result = stockSyncer.sync(xls_data, dry=args.dry)
+    result = stockSyncer.sync(xls_data, dry=args.dry)    
     for elem in result["missing_ids"]:
         print(f"{elem['id']}, {elem['name']}")
     if args.output:
@@ -88,7 +92,8 @@ def main(args):
         df.to_excel(writer, sheet_name="IDs manquants", index=False)
         # Close the Pandas Excel writer and output the Excel file.
         writer.save()
-
+    # update drive
+    stockSyncer.update_error(result=result)
 
 if __name__ == "__main__":
     parser = ArgumentParser()
