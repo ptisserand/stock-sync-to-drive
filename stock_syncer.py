@@ -3,6 +3,7 @@ from googleapiclient.discovery import build
 import pandas as pd
 import xlrd
 import re
+from datetime import datetime
 from numpy import isnan
 
 import logging
@@ -71,10 +72,12 @@ class DriveDocument(object):
         self.sheet = service.spreadsheets()
         self.sheetId = sheetId
         self.sheetLabel = sheetLabel
-        self._column_titles = None
+        self._column_titles = {}
 
-    def retrieve_column(self, column_name, formula=False) -> list:
-        range = f"{self.sheetLabel}!{column_name}:{column_name}"
+    def retrieve_column(self, column_name, formula=False, *, sheetLabel=None) -> list:
+        if sheetLabel is None:
+            sheetLabel = self.sheetLabel
+        range = f"{sheetLabel}!{column_name}:{column_name}"
         kwargs = {}
         if formula is True:
             kwargs["valueRenderOption"] = "FORMULA"
@@ -94,27 +97,33 @@ class DriveDocument(object):
             data.append(value)
         return data
 
-    def get_column_ref(self, key: str, refresh: bool = False) -> (str, int):
-        if self._column_titles is None or refresh is True:
+    def get_column_ref(
+        self, key: str, refresh: bool = False, *, sheetLabel=None
+    ) -> (str, int):
+        if sheetLabel is None:
+            sheetLabel = self.sheetLabel
+        if self._column_titles.get(sheetLabel, None) is None or refresh is True:
             result = (
                 self.sheet.values()
-                .get(spreadsheetId=self.sheetId, range=f"{self.sheetLabel}!1:1")
+                .get(spreadsheetId=self.sheetId, range=f"{sheetLabel}!1:1")
                 .execute()
             )
             values = result.get("values", [])
             # we retrieve only 1 row
             values = values[0]
-            self._column_titles = values
+            self._column_titles[sheetLabel] = values
         else:
-            values = self._column_titles
+            values = self._column_titles[sheetLabel]
         try:
             idx = values.index(key)
             return col_to_a1(idx), idx
         except ValueError:
             return "", -1
 
-    def batch_element(self, row, col, value) -> dict:
-        range_name = rowcol_to_a1(row, col, sheetLabel=self.sheetLabel)
+    def batch_element(self, row, col, value, *, sheetLabel=None) -> dict:
+        if sheetLabel is None:
+            sheetLabel = self.sheetLabel
+        range_name = rowcol_to_a1(row, col, sheetLabel=sheetLabel)
         return {"values": [[value]], "range": range_name}
 
     def commit_batch(self, data: list):
@@ -122,6 +131,19 @@ class DriveDocument(object):
         result = (
             self.sheet.values()
             .batchUpdate(spreadsheetId=self.sheetId, body=body)
+            .execute()
+        )
+        return result
+
+    def clear_column(self, col, *, sheetLabel=None) -> dict:
+        if sheetLabel is None:
+            sheetLabel = self.sheetLabel
+        # starting element:
+        start = rowcol_to_a1(row=1, col=col, sheetLabel=sheetLabel)
+        arange = f"{start}:{col_to_a1(col)}"
+        result = (
+            self.sheet.values()
+            .clear(spreadsheetId=self.sheetId, range=arange)
             .execute()
         )
         return result
@@ -160,17 +182,19 @@ class Stock(object):
         self.product_ids_mapping = ids_mapping
         return ids
 
-    def _retrieve_column(self, column_name) -> list:
-        return self.doc.retrieve_column(column_name=column_name)
+    def _retrieve_column(self, column_name, *, sheetLabel=None) -> list:
+        return self.doc.retrieve_column(column_name=column_name, sheetLabel=sheetLabel)
 
-    def _get_column_ref(self, key: str) -> (str, int):
-        name, id = self.doc.get_column_ref(key=key)
+    def _get_column_ref(self, key: str, *, sheetLabel=None) -> (str, int):
+        name, id = self.doc.get_column_ref(key=key, sheetLabel=sheetLabel)
         if id == -1:
             logger.error(f"Error retrieving column {key}")
         return name, id
 
-    def _batch_element(self, row, col, value) -> dict:
-        return self.doc.batch_element(row=row, col=col, value=value)
+    def _batch_element(self, row, col, value, *, sheetLabel=None) -> dict:
+        return self.doc.batch_element(
+            row=row, col=col, value=value, sheetLabel=sheetLabel
+        )
 
     def _commit_batch(self, data: list):
         return self.doc.commit_batch(data=data)
@@ -349,8 +373,38 @@ class StockSyncer(Stock):
         logger.info(f"Number of dropped elements: {count}")
         logger.info(f"Number of missing ids: {len(missing_ids)}")
         logger.info(f"Number of missing conditionning: {len(missing_conds)}")
-        result = {"commit": result_commit, "missing_ids": missing_ids}
+        result = {
+            "commit": result_commit,
+            "missing_ids": missing_ids,
+            "missing_conditioning": missing_conds,
+        }
         return result
+
+    def update_error(self, *, result):
+        now = datetime.now()
+        sheetLabel = self.drive["errors_sheet"]
+        logger.debug("Update error sheet")
+        missing_UGS_column_name, missing_UGS_column_id = self._get_column_ref(
+            self.drive["missing_UGS_title"], sheetLabel=sheetLabel
+        )
+        logger.info("Clearing missing IDs")
+        self.doc.clear_column(col=missing_UGS_column_id, sheetLabel=sheetLabel)
+        data = []
+        # Added date
+        value = now.strftime("%Y-%m-%d %H:%M:%S")
+        batch_entry = self._batch_element(0, 0, value, sheetLabel=sheetLabel)
+        data.append(batch_entry)
+        logger.debug("Prepare missing IDs update")
+        for i, missing in enumerate(result["missing_ids"]):
+            row = i + 1  # a little offset
+            value = f'{missing["id"]} - {missing["name"]}'
+            batch_entry = self._batch_element(
+                row, missing_UGS_column_id, value, sheetLabel=sheetLabel
+            )
+            data.append(batch_entry)
+        logger.info("Updating missing IDs")
+        result_commit = self._commit_batch(data)
+        return result_commit
 
 
 class StockCheckerID(Stock):
