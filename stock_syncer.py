@@ -70,7 +70,7 @@ class DriveDocument(object):
         # https://stackoverflow.com/questions/40154672/importerror-file-cache-is-unavailable-when-using-python-client-for-google-ser
         service = build("sheets", "v4", credentials=credentials, cache_discovery=False)
         self.sheet = service.spreadsheets()
-        self.sheetId = sheetId
+        self.spreadsheetId = sheetId
         self.sheetLabel = sheetLabel
         self._column_titles = {}
 
@@ -83,7 +83,7 @@ class DriveDocument(object):
             kwargs["valueRenderOption"] = "FORMULA"
         result = (
             self.sheet.values()
-            .get(spreadsheetId=self.sheetId, range=range, **kwargs)
+            .get(spreadsheetId=self.spreadsheetId, range=range, **kwargs)
             .execute()
         )
         values = result.get("values", [])
@@ -105,7 +105,7 @@ class DriveDocument(object):
         if self._column_titles.get(sheetLabel, None) is None or refresh is True:
             result = (
                 self.sheet.values()
-                .get(spreadsheetId=self.sheetId, range=f"{sheetLabel}!1:1")
+                .get(spreadsheetId=self.spreadsheetId, range=f"{sheetLabel}!1:1")
                 .execute()
             )
             values = result.get("values", [])
@@ -130,7 +130,7 @@ class DriveDocument(object):
         body = {"valueInputOption": "USER_ENTERED", "data": data}
         result = (
             self.sheet.values()
-            .batchUpdate(spreadsheetId=self.sheetId, body=body)
+            .batchUpdate(spreadsheetId=self.spreadsheetId, body=body)
             .execute()
         )
         return result
@@ -143,10 +143,24 @@ class DriveDocument(object):
         arange = f"{start}:{col_to_a1(col)}"
         result = (
             self.sheet.values()
-            .clear(spreadsheetId=self.sheetId, range=arange)
+            .clear(spreadsheetId=self.spreadsheetId, range=arange)
             .execute()
         )
         return result
+    
+    def get_sheet_URL(self, sheetLabel) -> str:
+        sheetId = None
+        result = self.sheet.get(spreadsheetId=self.spreadsheetId).execute()
+        for sheet in result['sheets']:
+            properties = sheet['properties']
+            label = properties['title']
+            if label == sheetLabel:
+                sheetId = properties['sheetId']
+                break
+        if sheetId is not None:
+            return f"https://docs.google.com/spreadsheets/d/{self.spreadsheetId}/edit#gid={sheetId}"
+        else:
+            return "http://www.cacango.com"
 
 
 class Stock(object):
@@ -404,7 +418,13 @@ class StockSyncer(Stock):
             data.append(batch_entry)
         logger.info("Updating missing IDs")
         result_commit = self._commit_batch(data)
-        return result_commit
+        logger.debug("Retrieving sheet URL")
+        sheet_url = self.doc.get_sheet_URL(sheetLabel=sheetLabel)
+        result = {
+            'commit': result_commit,
+            'url': sheet_url
+        }
+        return result
 
 
 class StockCheckerID(Stock):
