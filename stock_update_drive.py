@@ -79,7 +79,7 @@ def main(args):
     with open(stock_file, "rb") as f:
         xls_data = f.read()
 
-    result = stockSyncer.sync(xls_data, dry=args.dry)    
+    result = stockSyncer.sync(xls_data, dry=args.dry)
     for elem in result["missing_ids"]:
         print(f"{elem['id']}, {elem['name']}")
     if args.output:
@@ -93,7 +93,9 @@ def main(args):
         # Close the Pandas Excel writer and output the Excel file.
         writer.save()
     # update drive
-    stockSyncer.update_error(result=result)
+    update_res = stockSyncer.update_error(result=result)
+    print(f"Spreadsheet URL: {update_res['url']}")
+
 
 if __name__ == "__main__":
     parser = ArgumentParser()
